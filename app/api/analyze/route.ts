@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (err) {
+    console.error("Gemini request failed:", err);
     const { status, message } = mapGeminiError(err);
     return Response.json({ error: message }, { status });
   }
@@ -50,6 +51,7 @@ export async function POST(req: Request) {
       } catch (err) {
         // Surfaces to the client as a dropped stream; the UI shows the
         // partial report with an "interrupted" notice.
+        console.error("Gemini stream failed mid-generation:", err);
         controller.error(err);
       }
     },

@@ -16,6 +16,24 @@ describe("mapGeminiError", () => {
     expect(result.status).toBe(429);
   });
 
+  it("maps an error object carrying status 503 to a friendly 503", () => {
+    const err = Object.assign(new Error("got status: UNAVAILABLE"), {
+      status: 503,
+    });
+    const result = mapGeminiError(err);
+    expect(result.status).toBe(503);
+    expect(result.message).toContain("overloaded");
+  });
+
+  it("maps UNAVAILABLE messages to 503", () => {
+    const result = mapGeminiError(
+      new Error(
+        'got status: UNAVAILABLE. {"error":{"code":503,"message":"This model is currently experiencing high demand."}}'
+      )
+    );
+    expect(result.status).toBe(503);
+  });
+
   it("maps anything else to a sanitized 500", () => {
     const result = mapGeminiError(new Error("ECONNRESET something internal"));
     expect(result.status).toBe(500);

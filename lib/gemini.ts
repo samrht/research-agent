@@ -34,6 +34,14 @@ export function mapGeminiError(err: unknown): {
     };
   }
 
+  if (status === 503 || text.includes("UNAVAILABLE")) {
+    return {
+      status: 503,
+      message:
+        "Gemini is overloaded right now (free-tier capacity). Wait a few minutes and try again.",
+    };
+  }
+
   return {
     status: 500,
     message: "The analysis service hit an unexpected error. Please try again.",
