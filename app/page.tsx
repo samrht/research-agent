@@ -71,18 +71,10 @@ export default function Home() {
 
   return (
     <main className="container">
-      <header className="header">
-        <h1>Research Agent</h1>
-        <p>
-          Paste a paper or upload a PDF to get a State of the Field report —
-          findings checked against live literature search.
-        </p>
-      </header>
-
       {error && (
         <div className="error-banner" role="alert">
           <span>{error}</span>
-          <button onClick={() => setError(null)}>Dismiss</button>
+          <button onClick={() => setError(null)}>DISMISS</button>
         </div>
       )}
 
@@ -97,7 +89,7 @@ export default function Home() {
           />
           {phase === "done" && (
             <button className="reset-button" onClick={reset}>
-              Analyze another paper
+              ANALYZE&nbsp;ANOTHER&nbsp;PAPER
             </button>
           )}
         </>
