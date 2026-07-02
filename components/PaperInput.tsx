@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 export type PaperSubmission = { text: string } | { pdfBase64: string };
 
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
+const MAX_TEXT_CHARS = 200_000;
 
 const TOC = [
   { n: "01", label: "Paper Summary" },
@@ -54,14 +55,16 @@ export default function PaperInput({ onSubmit }: Props) {
     reader.readAsDataURL(file);
   }
 
-  const hasText = text.trim().length > 0;
-  const canSubmit = hasText || pdf !== null;
+  const trimmedText = text.trim();
+  const hasText = trimmedText.length > 0;
+  const textTooLong = trimmedText.length > MAX_TEXT_CHARS;
+  const canSubmit = (hasText && !textTooLong) || pdf !== null;
 
   function submit() {
     if (lastFilled === "pdf" && pdf) {
       onSubmit({ pdfBase64: pdf.base64 });
-    } else if (hasText) {
-      onSubmit({ text: text.trim() });
+    } else if (hasText && !textTooLong) {
+      onSubmit({ text: trimmedText });
     } else if (pdf) {
       onSubmit({ pdfBase64: pdf.base64 });
     }
@@ -92,7 +95,10 @@ export default function PaperInput({ onSubmit }: Props) {
           <div className="intake-card">
             <div className="intake-card-head">
               <span className="label">MANUSCRIPT&nbsp;TEXT</span>
-              <span className="hint">plain text</span>
+              <span className="hint">
+                plain text &middot; max{" "}
+                {MAX_TEXT_CHARS.toLocaleString()}&nbsp;characters
+              </span>
             </div>
 
             <textarea
@@ -104,6 +110,13 @@ export default function PaperInput({ onSubmit }: Props) {
                 setLastFilled("text");
               }}
             />
+            {textTooLong && (
+              <p className="field-error">
+                Text is too long ({trimmedText.length.toLocaleString()} of{" "}
+                {MAX_TEXT_CHARS.toLocaleString()} max characters). Trim it or
+                submit as a PDF instead.
+              </p>
+            )}
 
             <div className="or-divider">
               <span className="rule" />

@@ -8,6 +8,7 @@ type Props = {
   markdown: string;
   streaming: boolean;
   interrupted: boolean;
+  interruptedMessage?: string | null;
 };
 
 // The six phases the analyzer prompt actually executes, in order.
@@ -26,6 +27,7 @@ export default function ReportView({
   markdown,
   streaming,
   interrupted,
+  interruptedMessage,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +61,9 @@ export default function ReportView({
       {interrupted && (
         <div className="status status-warning">
           GENERATION&nbsp;INTERRUPTED&nbsp;&middot;&nbsp;THE&nbsp;REPORT&nbsp;BELOW&nbsp;IS&nbsp;PARTIAL
+          {interruptedMessage && (
+            <div className="status-detail">{interruptedMessage}</div>
+          )}
         </div>
       )}
 

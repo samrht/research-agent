@@ -49,5 +49,7 @@ npm test
 ```
 
 Unit tests cover request validation, prompt/content assembly, and Gemini
-error mapping. The streaming pipeline is verified manually against a live
-key.
+error mapping. The `/api/analyze` route itself is covered by integration
+tests against a mocked Gemini client (success, pre-stream errors, and
+mid-stream errors); end-to-end behavior against a live key is still checked
+manually.

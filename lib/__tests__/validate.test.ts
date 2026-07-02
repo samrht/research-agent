@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAnalyzeRequest, MAX_PDF_BYTES } from "../validate";
+import { parseAnalyzeRequest, MAX_PDF_BYTES, MAX_TEXT_CHARS } from "../validate";
 
 const validPdfBase64 = Buffer.from("%PDF-1.4 fake minimal pdf body").toString(
   "base64"
@@ -60,5 +60,18 @@ describe("parseAnalyzeRequest", () => {
     const result = parseAnalyzeRequest({ pdfBase64: oversized });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("15 MB");
+  });
+
+  it("accepts text right at the character cap", () => {
+    const result = parseAnalyzeRequest({ text: "a".repeat(MAX_TEXT_CHARS) });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects text over the character cap", () => {
+    const result = parseAnalyzeRequest({
+      text: "a".repeat(MAX_TEXT_CHARS + 1),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("too long");
   });
 });

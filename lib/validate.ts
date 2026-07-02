@@ -1,4 +1,5 @@
 export const MAX_PDF_BYTES = 15 * 1024 * 1024;
+export const MAX_TEXT_CHARS = 200_000;
 
 export type AnalyzeInput =
   | { kind: "text"; text: string }
@@ -27,7 +28,14 @@ export function parseAnalyzeRequest(body: unknown): ParseResult {
   }
 
   if (hasText) {
-    return { ok: true, input: { kind: "text", text: (text as string).trim() } };
+    const trimmed = (text as string).trim();
+    if (trimmed.length > MAX_TEXT_CHARS) {
+      return {
+        ok: false,
+        error: `Pasted text is too long (max ${MAX_TEXT_CHARS.toLocaleString()} characters).`,
+      };
+    }
+    return { ok: true, input: { kind: "text", text: trimmed } };
   }
 
   const b64 = pdfBase64 as string;
