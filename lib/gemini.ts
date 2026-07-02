@@ -25,7 +25,7 @@ export function mapGeminiError(err: unknown): {
   if (
     status === 429 ||
     text.includes("RESOURCE_EXHAUSTED") ||
-    text.includes("429")
+    /\bstatus:\s*429\b/i.test(text)
   ) {
     return {
       status: 429,

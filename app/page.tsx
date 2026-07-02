@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PaperInput, { PaperSubmission } from "@/components/PaperInput";
 import ReportView from "@/components/ReportView";
+import { splitStreamBody } from "@/lib/stream";
 
 type Phase = "input" | "analyzing" | "done";
 
@@ -11,12 +12,25 @@ export default function Home() {
   const [report, setReport] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [interrupted, setInterrupted] = useState(false);
+  const [interruptedMessage, setInterruptedMessage] = useState<string | null>(
+    null
+  );
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Stop pulling from the server if the component unmounts mid-stream.
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   async function handleSubmit(submission: PaperSubmission) {
     setPhase("analyzing");
     setReport("");
     setError(null);
     setInterrupted(false);
+    setInterruptedMessage(null);
+
+    const abortController = new AbortController();
+    abortRef.current = abortController;
 
     let res: Response;
     try {
@@ -24,8 +38,10 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submission),
+        signal: abortController.signal,
       });
     } catch {
+      if (abortController.signal.aborted) return;
       setError(
         "Could not reach the server. Check your connection and try again."
       );
@@ -57,16 +73,26 @@ export default function Home() {
         setReport(received);
       }
     } catch {
+      if (abortController.signal.aborted) return;
       setInterrupted(true);
+    }
+
+    const { report: finalReport, streamError } = splitStreamBody(received);
+    setReport(finalReport);
+    if (streamError) {
+      setInterrupted(true);
+      setInterruptedMessage(streamError.message);
     }
     setPhase("done");
   }
 
   function reset() {
+    abortRef.current?.abort();
     setPhase("input");
     setReport("");
     setError(null);
     setInterrupted(false);
+    setInterruptedMessage(null);
   }
 
   return (
@@ -86,6 +112,7 @@ export default function Home() {
             markdown={report}
             streaming={phase === "analyzing"}
             interrupted={interrupted}
+            interruptedMessage={interruptedMessage}
           />
           {phase === "done" && (
             <button className="reset-button" onClick={reset}>

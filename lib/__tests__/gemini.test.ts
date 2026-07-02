@@ -44,4 +44,16 @@ describe("mapGeminiError", () => {
     const result = mapGeminiError("string failure");
     expect(result.status).toBe(500);
   });
+
+  it("does not misclassify unrelated messages that merely contain the substring 429", () => {
+    const result = mapGeminiError(
+      new Error("connect ECONNREFUSED 127.0.0.1:429")
+    );
+    expect(result.status).toBe(500);
+  });
+
+  it("maps a status: 429 message to 429", () => {
+    const result = mapGeminiError(new Error("got status: 429. rate limited"));
+    expect(result.status).toBe(429);
+  });
 });
