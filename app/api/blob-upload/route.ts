@@ -1,13 +1,22 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import {
+  handleUploadPresigned,
+  type HandleUploadPresignedBody,
+} from "@vercel/blob/client";
+import { issueSignedToken } from "@vercel/blob";
 import { MAX_PDF_BYTES, BLOB_PDF_PREFIX } from "@/lib/limits";
 
-// Mints a short-lived, scoped token so the browser can upload a paper
+// Issues a short-lived presigned URL so the browser can upload a paper
 // straight to Blob storage. The PDF never passes through a function, which
 // is what lets it exceed Vercel's 4.5 MB request body limit.
+//
+// This is the OIDC flow (VERCEL_OIDC_TOKEN + BLOB_STORE_ID), which is what
+// connecting a store to a project provisions. The older handleUpload/
+// generateClientToken path needs a BLOB_READ_WRITE_TOKEN, which is not
+// issued any more.
 export async function POST(request: Request): Promise<Response> {
-  let body: HandleUploadBody;
+  let body: HandleUploadPresignedBody;
   try {
-    body = (await request.json()) as HandleUploadBody;
+    body = (await request.json()) as HandleUploadPresignedBody;
   } catch {
     return Response.json(
       { error: "Request body must be valid JSON." },
@@ -15,8 +24,8 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    console.error("BLOB_READ_WRITE_TOKEN is not set; PDF upload is disabled.");
+  if (!process.env.BLOB_STORE_ID) {
+    console.error("BLOB_STORE_ID is not set; PDF upload is disabled.");
     return Response.json(
       {
         error:
@@ -27,36 +36,36 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const jsonResponse = await handleUpload({
+    const jsonResponse = await handleUploadPresigned({
       body,
       request,
-      onBeforeGenerateToken: async (pathname) => {
-        // The token goes to the browser, so these constraints are the real
-        // enforcement point — the client-side checks are only for feedback.
+      getSignedToken: async (pathname) => {
+        // The presigned URL goes to the browser, so these constraints are
+        // the real enforcement point — the client-side checks only exist to
+        // give quick feedback.
         if (!pathname.startsWith(BLOB_PDF_PREFIX)) {
           throw new Error("Uploads must go under the papers/ prefix.");
         }
-        return {
+        const token = await issueSignedToken({
+          pathname,
+          operations: ["put"],
           allowedContentTypes: ["application/pdf"],
           maximumSizeInBytes: MAX_PDF_BYTES,
-          addRandomSuffix: true,
           // An upload that is never analyzed is orphaned, so keep the window
           // to claim one short.
           validUntil: Date.now() + 60 * 60 * 1000,
-        };
+        });
+        return { token };
       },
-      onUploadCompleted: async () => {
-        // Nothing to record: /api/analyze deletes the blob once it has read
-        // it, and there is no database to update.
-      },
+      // No onUploadCompleted: there is nothing to record (no database, and
+      // /api/analyze deletes the blob once it has read it). Omitting it also
+      // avoids registering a webhook callback that Blob cannot reach when
+      // running on localhost.
     });
 
     return Response.json(jsonResponse);
   } catch (err) {
-    console.error("Blob upload token request failed:", err);
-    return Response.json(
-      { error: (err as Error).message },
-      { status: 400 }
-    );
+    console.error("Blob presigned upload request failed:", err);
+    return Response.json({ error: (err as Error).message }, { status: 400 });
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import { MAX_PDF_BYTES, MAX_PDF_LABEL, BLOB_PDF_PREFIX } from "@/lib/limits";
 
 export type PaperSubmission = { text: string } | { blobUrl: string };
@@ -54,7 +54,7 @@ export default function PaperInput({ onSubmit }: Props) {
     setUploading(true);
     setPdf(null);
     try {
-      const blob = await upload(`${BLOB_PDF_PREFIX}${file.name}`, file, {
+      const blob = await uploadPresigned(`${BLOB_PDF_PREFIX}${file.name}`, file, {
         access: "private",
         contentType: "application/pdf",
         handleUploadUrl: "/api/blob-upload",
