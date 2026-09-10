@@ -89,6 +89,27 @@ describe("mapGeminiError", () => {
     expect(result.message).toContain("GEMINI_API_KEY");
   });
 
+  it("maps an oversized-input 400 to a length message, not a key message", () => {
+    // Regression: any 400 used to be reported as a bad API key, which sent
+    // you looking at env vars when the real problem was the paper's length.
+    const err = Object.assign(
+      new Error(
+        '{"error":{"code":400,"message":"The input token count exceeds the maximum number of tokens allowed 1048576.","status":"INVALID_ARGUMENT"}}'
+      ),
+      { status: 400 }
+    );
+    const result = mapGeminiError(err);
+    expect(result.message).toMatch(/too long/i);
+    expect(result.message).not.toContain("GEMINI_API_KEY");
+  });
+
+  it("does not blame the API key for an unrelated 400", () => {
+    const err = Object.assign(new Error("some other bad request"), {
+      status: 400,
+    });
+    expect(mapGeminiError(err).message).not.toContain("GEMINI_API_KEY");
+  });
+
   it("maps anything else to a sanitized 500", () => {
     const result = mapGeminiError(new Error("ECONNRESET something internal"));
     expect(result.status).toBe(500);

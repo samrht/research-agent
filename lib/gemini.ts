@@ -60,15 +60,21 @@ export function mapGeminiError(err: unknown): {
     return { status: 500, message: text };
   }
 
-  if (
-    status === 400 ||
-    text.includes("API_KEY_INVALID") ||
-    text.includes("API key not valid")
-  ) {
+  // Only claim a key problem when the upstream message actually says so.
+  // Matching on status 400 alone mislabels every other bad request.
+  if (text.includes("API_KEY_INVALID") || text.includes("API key not valid")) {
     return {
       status: 500,
       message:
         "Gemini rejected the API key. Check GEMINI_API_KEY in your Vercel project settings.",
+    };
+  }
+
+  if (text.includes("input token count exceeds")) {
+    return {
+      status: 413,
+      message:
+        "This paper is too long for the model to read in one pass. Try a shorter paper, or paste just the sections you want analyzed.",
     };
   }
 
