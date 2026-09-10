@@ -50,7 +50,11 @@ export default function Home() {
     }
 
     if (!res.ok || !res.body) {
-      let message = `Request failed (status ${res.status}).`;
+      // A 413 comes from Vercel's edge as plain text, not our JSON error shape.
+      let message =
+        res.status === 413
+          ? "That upload is too large for the server. Try a smaller PDF, or paste the paper text."
+          : `Request failed (status ${res.status}).`;
       try {
         const data = (await res.json()) as { error?: string };
         if (data.error) message = data.error;

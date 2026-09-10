@@ -1,4 +1,6 @@
-export const MAX_PDF_BYTES = 15 * 1024 * 1024;
+import { MAX_PDF_BYTES, MAX_PDF_LABEL } from "./limits";
+
+export { MAX_PDF_BYTES };
 export const MAX_TEXT_CHARS = 200_000;
 
 export type AnalyzeInput =
@@ -46,7 +48,7 @@ export function parseAnalyzeRequest(body: unknown): ParseResult {
   const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
   const decodedBytes = Math.floor((b64.length * 3) / 4) - padding;
   if (decodedBytes > MAX_PDF_BYTES) {
-    return { ok: false, error: "PDF is too large (max 15 MB)." };
+    return { ok: false, error: `PDF is too large (max ${MAX_PDF_LABEL}).` };
   }
 
   const headerPrefix = Buffer.from(b64.slice(0, 8), "base64").toString(

@@ -59,7 +59,12 @@ describe("parseAnalyzeRequest", () => {
     const oversized = Buffer.alloc(MAX_PDF_BYTES + 1).toString("base64");
     const result = parseAnalyzeRequest({ pdfBase64: oversized });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("15 MB");
+    if (!result.ok) expect(result.error).toContain("3 MB");
+  });
+
+  it("caps PDFs below Vercel's 4.5 MB request body limit once base64-encoded", () => {
+    const encodedBytes = Math.ceil(MAX_PDF_BYTES / 3) * 4;
+    expect(encodedBytes).toBeLessThan(4.5 * 1024 * 1024);
   });
 
   it("accepts text right at the character cap", () => {

@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { MAX_PDF_BYTES, MAX_PDF_LABEL } from "@/lib/limits";
 
 export type PaperSubmission = { text: string } | { pdfBase64: string };
 
-const MAX_PDF_BYTES = 15 * 1024 * 1024;
 const MAX_TEXT_CHARS = 200_000;
 
 const TOC = [
@@ -41,7 +41,9 @@ export default function PaperInput({ onSubmit }: Props) {
       return;
     }
     if (file.size > MAX_PDF_BYTES) {
-      setFileError("PDF is too large (max 15 MB).");
+      setFileError(
+        `PDF is too large (max ${MAX_PDF_LABEL}). Paste the paper text instead.`
+      );
       return;
     }
     const reader = new FileReader();
@@ -147,7 +149,8 @@ export default function PaperInput({ onSubmit }: Props) {
                 </div>
               ) : (
                 <div className="sub">
-                  drop a file here, or click to browse &middot; max 15&nbsp;MB
+                  drop a file here, or click to browse &middot; max{" "}
+                  {MAX_PDF_LABEL}
                 </div>
               )}
               <input

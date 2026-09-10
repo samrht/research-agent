@@ -2,14 +2,34 @@ import { GoogleGenAI } from "@google/genai";
 
 export const GEMINI_MODEL = "gemini-2.5-flash";
 
-export function getGeminiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
+// Visible ASCII only — anything else blows up when the SDK appends the key as
+// an HTTP header, with an error that names ByteString rather than the key.
+const HEADER_SAFE_RE = /^[\x21-\x7e]+$/;
+
+/**
+ * Reads GEMINI_API_KEY, stripping the BOM and stray whitespace that env-var
+ * tooling (notably `vercel env add` fed from a PowerShell redirect) prepends.
+ */
+export function readApiKey(): string {
+  const apiKey = (process.env.GEMINI_API_KEY ?? "")
+    .replace(/﻿/g, "")
+    .trim();
+
   if (!apiKey) {
     throw new Error(
       "GEMINI_API_KEY is not set. Add it to .env.local (see .env.example)."
     );
   }
-  return new GoogleGenAI({ apiKey });
+  if (!HEADER_SAFE_RE.test(apiKey)) {
+    throw new Error(
+      "GEMINI_API_KEY contains invalid characters. Re-add the key with no quotes, spaces, or line breaks."
+    );
+  }
+  return apiKey;
+}
+
+export function getGeminiClient(): GoogleGenAI {
+  return new GoogleGenAI({ apiKey: readApiKey() });
 }
 
 export function mapGeminiError(err: unknown): {
@@ -31,6 +51,24 @@ export function mapGeminiError(err: unknown): {
       status: 429,
       message:
         "Gemini free-tier limit reached (roughly 10 requests/minute and a daily cap). Wait a minute and try again.",
+    };
+  }
+
+  // Config errors from readApiKey() name the env var and carry no secret, so
+  // pass them through verbatim rather than hiding them behind "unexpected".
+  if (text.startsWith("GEMINI_API_KEY")) {
+    return { status: 500, message: text };
+  }
+
+  if (
+    status === 400 ||
+    text.includes("API_KEY_INVALID") ||
+    text.includes("API key not valid")
+  ) {
+    return {
+      status: 500,
+      message:
+        "Gemini rejected the API key. Check GEMINI_API_KEY in your Vercel project settings.",
     };
   }
 

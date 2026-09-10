@@ -1,5 +1,45 @@
-import { describe, it, expect } from "vitest";
-import { mapGeminiError } from "../gemini";
+import { describe, it, expect, afterEach } from "vitest";
+import { mapGeminiError, readApiKey } from "../gemini";
+
+describe("readApiKey", () => {
+  const original = process.env.GEMINI_API_KEY;
+  afterEach(() => {
+    if (original === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = original;
+  });
+
+  it("strips a leading UTF-8 BOM", () => {
+    // A BOM sneaks in when the key is piped into `vercel env add` from a
+    // PowerShell redirect; it makes the SDK throw an opaque ByteString error.
+    process.env.GEMINI_API_KEY = "﻿AQ.Ab8RN6key";
+    expect(readApiKey()).toBe("AQ.Ab8RN6key");
+  });
+
+  it("strips surrounding whitespace and newlines", () => {
+    process.env.GEMINI_API_KEY = "  AQ.Ab8RN6key\r\n";
+    expect(readApiKey()).toBe("AQ.Ab8RN6key");
+  });
+
+  it("returns a clean key untouched", () => {
+    process.env.GEMINI_API_KEY = "AQ.Ab8RN6key";
+    expect(readApiKey()).toBe("AQ.Ab8RN6key");
+  });
+
+  it("throws when the key is unset", () => {
+    delete process.env.GEMINI_API_KEY;
+    expect(() => readApiKey()).toThrow(/GEMINI_API_KEY/);
+  });
+
+  it("throws when the key is only whitespace or a BOM", () => {
+    process.env.GEMINI_API_KEY = "﻿  ";
+    expect(() => readApiKey()).toThrow(/GEMINI_API_KEY/);
+  });
+
+  it("rejects a key with characters that cannot go in an HTTP header", () => {
+    process.env.GEMINI_API_KEY = "AQ.Ab8 RN6key";
+    expect(() => readApiKey()).toThrow(/invalid characters/i);
+  });
+});
 
 describe("mapGeminiError", () => {
   it("maps an error object carrying status 429 to a friendly 429", () => {
@@ -32,6 +72,21 @@ describe("mapGeminiError", () => {
       )
     );
     expect(result.status).toBe(503);
+  });
+
+  it("passes GEMINI_API_KEY config errors through verbatim", () => {
+    const result = mapGeminiError(
+      new Error("GEMINI_API_KEY is not set. Add it to .env.local.")
+    );
+    expect(result.status).toBe(500);
+    expect(result.message).toContain("GEMINI_API_KEY");
+  });
+
+  it("maps a rejected API key to an actionable message", () => {
+    const result = mapGeminiError(
+      new Error('got status: 400 {"error":{"message":"API key not valid"}}')
+    );
+    expect(result.message).toContain("GEMINI_API_KEY");
   });
 
   it("maps anything else to a sanitized 500", () => {
