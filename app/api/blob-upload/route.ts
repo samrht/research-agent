@@ -5,6 +5,11 @@ import {
 import { issueSignedToken } from "@vercel/blob";
 import { MAX_PDF_BYTES, BLOB_PDF_PREFIX } from "@/lib/limits";
 
+// papers/<uuid>.pdf — what PaperInput generates, and nothing else.
+const UPLOAD_PATHNAME_RE = new RegExp(
+  `^${BLOB_PDF_PREFIX}[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.pdf$`
+);
+
 // Issues a short-lived presigned URL so the browser can upload a paper
 // straight to Blob storage. The PDF never passes through a function, which
 // is what lets it exceed Vercel's 4.5 MB request body limit.
@@ -43,8 +48,10 @@ export async function POST(request: Request): Promise<Response> {
         // The presigned URL goes to the browser, so these constraints are
         // the real enforcement point — the client-side checks only exist to
         // give quick feedback.
-        if (!pathname.startsWith(BLOB_PDF_PREFIX)) {
-          throw new Error("Uploads must go under the papers/ prefix.");
+        // Pin the shape too, not just the prefix: a caller-chosen name
+        // could collide with another upload or overwrite it.
+        if (!UPLOAD_PATHNAME_RE.test(pathname)) {
+          throw new Error("Upload pathname is not in the expected form.");
         }
         const token = await issueSignedToken({
           pathname,

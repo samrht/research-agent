@@ -54,7 +54,11 @@ export default function PaperInput({ onSubmit }: Props) {
     setUploading(true);
     setPdf(null);
     try {
-      const blob = await uploadPresigned(`${BLOB_PDF_PREFIX}${file.name}`, file, {
+      // A unique pathname per upload: the presigned flow has no
+      // addRandomSuffix, so reusing the filename would collide between
+      // users, and it keeps the original filename out of the blob URL.
+      const pathname = `${BLOB_PDF_PREFIX}${crypto.randomUUID()}.pdf`;
+      const blob = await uploadPresigned(pathname, file, {
         access: "private",
         contentType: "application/pdf",
         handleUploadUrl: "/api/blob-upload",
