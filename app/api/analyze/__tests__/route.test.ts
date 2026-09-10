@@ -244,6 +244,28 @@ describe("POST /api/analyze", () => {
     });
   });
 
+  it("returns the mapped config error when the Gemini client cannot be built", async () => {
+    // Regression: this used to escape the handler as a bare 500 with an
+    // empty body, which is how a missing key looked in production.
+    const gemini = await import("@/lib/gemini");
+    const spy = vi
+      .spyOn(gemini, "getGeminiClient")
+      .mockImplementation(() => {
+        throw new Error("GEMINI_API_KEY is not set. Add it to .env.local.");
+      });
+    const { POST } = await import("../route");
+    const res = await POST(
+      new Request("http://test/api/analyze", {
+        method: "POST",
+        body: JSON.stringify({ text: "a paper" }),
+      })
+    );
+    expect(res.status).toBe(500);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toContain("GEMINI_API_KEY");
+    spy.mockRestore();
+  });
+
   it("aborts the Gemini call when the client cancels the response stream", async () => {
     let capturedSignal: AbortSignal | undefined;
     generateContentStream.mockImplementationOnce(async (params: any) => {

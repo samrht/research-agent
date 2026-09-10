@@ -75,7 +75,17 @@ export async function POST(req: Request) {
   // SDK docs it does not cancel the request on Gemini's side.
   const abortController = new AbortController();
 
-  const ai = getGeminiClient();
+  // Constructing the client validates GEMINI_API_KEY, so a misconfigured
+  // deployment has to surface here rather than escaping as a bare 500.
+  let ai: ReturnType<typeof getGeminiClient>;
+  try {
+    ai = getGeminiClient();
+  } catch (err) {
+    console.error("Gemini client could not be created:", err);
+    const { status, message } = mapGeminiError(err);
+    return Response.json({ error: message }, { status });
+  }
+
   let source: AnalyzerSource;
   let geminiFileName: string | undefined;
 
