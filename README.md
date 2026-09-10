@@ -27,17 +27,22 @@ Search grounding · react-markdown · Vitest.
    npm run dev
    ```
 
-4. Open http://localhost:3000, paste paper text or drop a PDF (max 3 MB),
+4. Open http://localhost:3000, paste paper text or drop a PDF (max 25 MB),
    and click **Analyze paper**.
+
+PDF upload also needs a Vercel Blob store. Run `vercel env pull .env.local`
+after connecting one so `BLOB_READ_WRITE_TOKEN` is available locally;
+without it, pasting text still works but uploads will fail.
 
 ## Notes & limits
 
 - **Free tier:** Gemini's free tier allows roughly 10 requests/minute with a
   daily cap, and search grounding has its own free daily quota. Hitting a
   limit returns a clear "try again in a minute" error.
-- **PDF size:** Vercel rejects request bodies over 4.5 MB before the function
-  runs, and base64 inflates a PDF by 4/3, so the cap is 3 MB. For a larger
-  paper, paste the text instead.
+- **PDF size:** capped at 25 MB. Vercel rejects function request bodies over
+  4.5 MB, so the browser uploads the PDF straight to Vercel Blob and only
+  sends the resulting URL to `/api/analyze`. The server then hands the file
+  to Gemini's Files API and deletes the blob, so nothing is retained.
 - **Long reports:** a full report takes a few minutes and streams in as it
   generates. The API route sets `maxDuration = 300`.
 - **Vercel deploys:** request bodies are capped at ~4.5 MB on Vercel, so

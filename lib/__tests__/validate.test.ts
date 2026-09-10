@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parseAnalyzeRequest, MAX_PDF_BYTES, MAX_TEXT_CHARS } from "../validate";
+import { parseAnalyzeRequest, MAX_TEXT_CHARS } from "../validate";
 
-const validPdfBase64 = Buffer.from("%PDF-1.4 fake minimal pdf body").toString(
-  "base64"
-);
+const validBlobUrl =
+  "https://42ji8ihaqx56cqj9.private.blob.vercel-storage.com/papers/paper-abc123.pdf";
 
 describe("parseAnalyzeRequest", () => {
   it("accepts pasted text and trims it", () => {
@@ -15,8 +14,7 @@ describe("parseAnalyzeRequest", () => {
   });
 
   it("rejects whitespace-only text", () => {
-    const result = parseAnalyzeRequest({ text: "   " });
-    expect(result.ok).toBe(false);
+    expect(parseAnalyzeRequest({ text: "   " }).ok).toBe(false);
   });
 
   it("rejects a non-object body", () => {
@@ -24,10 +22,10 @@ describe("parseAnalyzeRequest", () => {
     expect(parseAnalyzeRequest("hello").ok).toBe(false);
   });
 
-  it("rejects when both text and pdfBase64 are provided", () => {
+  it("rejects when both text and blobUrl are provided", () => {
     const result = parseAnalyzeRequest({
       text: "abc",
-      pdfBase64: validPdfBase64,
+      blobUrl: validBlobUrl,
     });
     expect(result.ok).toBe(false);
   });
@@ -36,35 +34,12 @@ describe("parseAnalyzeRequest", () => {
     expect(parseAnalyzeRequest({}).ok).toBe(false);
   });
 
-  it("accepts a valid PDF payload", () => {
-    const result = parseAnalyzeRequest({ pdfBase64: validPdfBase64 });
+  it("accepts a blob URL from our store under the papers prefix", () => {
+    const result = parseAnalyzeRequest({ blobUrl: validBlobUrl });
     expect(result).toEqual({
       ok: true,
-      input: { kind: "pdf", pdfBase64: validPdfBase64 },
+      input: { kind: "pdf", blobUrl: validBlobUrl },
     });
-  });
-
-  it("rejects invalid base64", () => {
-    const result = parseAnalyzeRequest({ pdfBase64: "not base64!!!" });
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects data without a %PDF header", () => {
-    const notPdf = Buffer.from("hello world this is text").toString("base64");
-    const result = parseAnalyzeRequest({ pdfBase64: notPdf });
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects PDFs over the size cap", () => {
-    const oversized = Buffer.alloc(MAX_PDF_BYTES + 1).toString("base64");
-    const result = parseAnalyzeRequest({ pdfBase64: oversized });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("3 MB");
-  });
-
-  it("caps PDFs below Vercel's 4.5 MB request body limit once base64-encoded", () => {
-    const encodedBytes = Math.ceil(MAX_PDF_BYTES / 3) * 4;
-    expect(encodedBytes).toBeLessThan(4.5 * 1024 * 1024);
   });
 
   it("accepts text right at the character cap", () => {
@@ -78,5 +53,37 @@ describe("parseAnalyzeRequest", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("too long");
+  });
+
+  describe("blob URL allowlist", () => {
+    // The route fetches this URL server-side, so anything that is not our own
+    // blob store must be refused or the endpoint becomes an SSRF proxy.
+    const rejected: [string, string][] = [
+      ["a host we do not own", "https://evil.example.com/papers/x.pdf"],
+      [
+        "a lookalike host suffix",
+        "https://evil.com/papers/x.pdf#.blob.vercel-storage.com",
+      ],
+      [
+        "a subdomain-suffix trick",
+        "https://notblob.vercel-storage.com.evil.com/papers/x.pdf",
+      ],
+      ["plain http", "http://abc.blob.vercel-storage.com/papers/x.pdf"],
+      [
+        "a path outside the papers prefix",
+        "https://abc.blob.vercel-storage.com/secrets/key.txt",
+      ],
+      ["localhost", "http://localhost:3000/papers/x.pdf"],
+      ["the cloud metadata endpoint", "http://169.254.169.254/latest/meta-data"],
+      ["a file URL", "file:///etc/passwd"],
+      ["not a URL at all", "papers/x.pdf"],
+    ];
+
+    for (const [label, url] of rejected) {
+      it(`rejects ${label}`, () => {
+        const result = parseAnalyzeRequest({ blobUrl: url });
+        expect(result.ok).toBe(false);
+      });
+    }
   });
 });

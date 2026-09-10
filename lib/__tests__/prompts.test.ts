@@ -27,16 +27,20 @@ describe("buildAnalyzerContents", () => {
     );
   });
 
-  it("attaches a PDF as an inlineData part after the prompt", () => {
+  it("references an uploaded PDF as a fileData part after the prompt", () => {
     const contents = buildAnalyzerContents({
-      kind: "pdf",
-      pdfBase64: "JVBERi0xLjQ=",
+      kind: "file",
+      fileUri: "https://generativelanguage.googleapis.com/v1beta/files/abc",
+      mimeType: "application/pdf",
     });
     expect(contents).toHaveLength(1);
     expect(contents[0].parts).toHaveLength(2);
     expect(contents[0].parts[0]).toEqual({ text: PAPER_ANALYZER_PROMPT });
     expect(contents[0].parts[1]).toEqual({
-      inlineData: { mimeType: "application/pdf", data: "JVBERi0xLjQ=" },
+      fileData: {
+        mimeType: "application/pdf",
+        fileUri: "https://generativelanguage.googleapis.com/v1beta/files/abc",
+      },
     });
   });
 });

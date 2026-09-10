@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { MAX_PDF_BYTES, MAX_PDF_LABEL } from "@/lib/limits";
+import { upload } from "@vercel/blob/client";
+import { MAX_PDF_BYTES, MAX_PDF_LABEL, BLOB_PDF_PREFIX } from "@/lib/limits";
 
-export type PaperSubmission = { text: string } | { pdfBase64: string };
+export type PaperSubmission = { text: string } | { blobUrl: string };
 
 const MAX_TEXT_CHARS = 200_000;
 
@@ -23,15 +24,18 @@ type Props = {
 
 export default function PaperInput({ onSubmit }: Props) {
   const [text, setText] = useState("");
-  const [pdf, setPdf] = useState<{ name: string; base64: string } | null>(
+  const [pdf, setPdf] = useState<{ name: string; blobUrl: string } | null>(
     null
   );
   const [lastFilled, setLastFilled] = useState<"text" | "pdf" | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleFile(file: File) {
+  // Uploads go browser -> Blob directly. Routing them through the API would
+  // put them back under Vercel's 4.5 MB function body limit.
+  async function handleFile(file: File) {
     setFileError(null);
     const isPdf =
       file.type === "application/pdf" ||
@@ -46,29 +50,40 @@ export default function PaperInput({ onSubmit }: Props) {
       );
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
-      setPdf({ name: file.name, base64 });
+
+    setUploading(true);
+    setPdf(null);
+    try {
+      const blob = await upload(`${BLOB_PDF_PREFIX}${file.name}`, file, {
+        access: "private",
+        contentType: "application/pdf",
+        handleUploadUrl: "/api/blob-upload",
+      });
+      setPdf({ name: file.name, blobUrl: blob.url });
       setLastFilled("pdf");
-    };
-    reader.onerror = () => setFileError("Could not read the file. Try again.");
-    reader.readAsDataURL(file);
+    } catch (err) {
+      setFileError(
+        err instanceof Error && err.message
+          ? `Upload failed: ${err.message}`
+          : "Upload failed. Try again."
+      );
+    } finally {
+      setUploading(false);
+    }
   }
 
   const trimmedText = text.trim();
   const hasText = trimmedText.length > 0;
   const textTooLong = trimmedText.length > MAX_TEXT_CHARS;
-  const canSubmit = (hasText && !textTooLong) || pdf !== null;
+  const canSubmit = !uploading && ((hasText && !textTooLong) || pdf !== null);
 
   function submit() {
     if (lastFilled === "pdf" && pdf) {
-      onSubmit({ pdfBase64: pdf.base64 });
+      onSubmit({ blobUrl: pdf.blobUrl });
     } else if (hasText && !textTooLong) {
       onSubmit({ text: trimmedText });
     } else if (pdf) {
-      onSubmit({ pdfBase64: pdf.base64 });
+      onSubmit({ blobUrl: pdf.blobUrl });
     }
   }
 
@@ -142,7 +157,9 @@ export default function PaperInput({ onSubmit }: Props) {
               }}
             >
               <div className="deposit">⌹&nbsp;&nbsp;Deposit a PDF</div>
-              {pdf ? (
+              {uploading ? (
+                <div className="sub">uploading&hellip;</div>
+              ) : pdf ? (
                 <div className="sub">
                   <span className="file-name">{pdf.name}</span> ready — drop
                   another to replace it
@@ -175,7 +192,7 @@ export default function PaperInput({ onSubmit }: Props) {
                 disabled={!canSubmit}
                 onClick={submit}
               >
-                BEGIN&nbsp;ANALYSIS&nbsp;&rarr;
+                {uploading ? "UPLOADING…" : <>BEGIN&nbsp;ANALYSIS&nbsp;&rarr;</>}
               </button>
             </div>
           </div>

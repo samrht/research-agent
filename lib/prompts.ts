@@ -1,4 +1,9 @@
-import type { AnalyzeInput } from "./validate";
+// The PDF arrives as a Files API reference rather than inline bytes, so this
+// is not the same shape as the parsed request — the route resolves a blob URL
+// into an uploaded file before building contents.
+export type AnalyzerSource =
+  | { kind: "text"; text: string }
+  | { kind: "file"; fileUri: string; mimeType: string };
 
 export const PAPER_ANALYZER_PROMPT = `Analyze the following research paper and produce a complete State of the Field report. Work through each phase fully before moving to the next.
 
@@ -74,16 +79,16 @@ Be direct. Make calls. Flag uncertain claims. Do not hedge everything — a usef
 
 export type ContentPart =
   | { text: string }
-  | { inlineData: { mimeType: string; data: string } };
+  | { fileData: { mimeType: string; fileUri: string } };
 
 export type Content = { role: "user"; parts: ContentPart[] };
 
-export function buildAnalyzerContents(input: AnalyzeInput): Content[] {
-  if (input.kind === "text") {
+export function buildAnalyzerContents(source: AnalyzerSource): Content[] {
+  if (source.kind === "text") {
     return [
       {
         role: "user",
-        parts: [{ text: `${PAPER_ANALYZER_PROMPT}\n\n${input.text}` }],
+        parts: [{ text: `${PAPER_ANALYZER_PROMPT}\n\n${source.text}` }],
       },
     ];
   }
@@ -93,7 +98,10 @@ export function buildAnalyzerContents(input: AnalyzeInput): Content[] {
       parts: [
         { text: PAPER_ANALYZER_PROMPT },
         {
-          inlineData: { mimeType: "application/pdf", data: input.pdfBase64 },
+          fileData: {
+            mimeType: source.mimeType,
+            fileUri: source.fileUri,
+          },
         },
       ],
     },
