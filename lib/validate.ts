@@ -1,26 +1,46 @@
-import { MAX_PDF_BYTES, MAX_PDF_LABEL } from "./limits";
+import { BLOB_HOST_SUFFIX, BLOB_PDF_PREFIX, MAX_PDF_BYTES } from "./limits";
 
 export { MAX_PDF_BYTES };
 export const MAX_TEXT_CHARS = 200_000;
 
 export type AnalyzeInput =
   | { kind: "text"; text: string }
-  | { kind: "pdf"; pdfBase64: string };
+  | { kind: "pdf"; blobUrl: string };
 
 export type ParseResult =
   | { ok: true; input: AnalyzeInput }
   | { ok: false; error: string };
 
-const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+const BAD_BLOB_URL = "That upload link is not valid. Try uploading again.";
+
+/**
+ * The analyze route fetches whatever URL it is handed, so this has to be a
+ * strict allowlist: HTTPS, a Vercel Blob host, and a path under our own
+ * upload prefix. Anything looser turns the route into an SSRF proxy.
+ */
+function isOurBlobUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+
+  if (url.protocol !== "https:") return false;
+  if (!url.hostname.endsWith(BLOB_HOST_SUFFIX)) return false;
+  // Guard against a hostname that is only the suffix, e.g. ".blob.vercel-…".
+  if (url.hostname.length <= BLOB_HOST_SUFFIX.length) return false;
+  return url.pathname.startsWith(`/${BLOB_PDF_PREFIX}`);
+}
 
 export function parseAnalyzeRequest(body: unknown): ParseResult {
   if (typeof body !== "object" || body === null) {
     return { ok: false, error: "Request body must be a JSON object." };
   }
 
-  const { text, pdfBase64 } = body as { text?: unknown; pdfBase64?: unknown };
+  const { text, blobUrl } = body as { text?: unknown; blobUrl?: unknown };
   const hasText = typeof text === "string" && text.trim().length > 0;
-  const hasPdf = typeof pdfBase64 === "string" && pdfBase64.length > 0;
+  const hasPdf = typeof blobUrl === "string" && blobUrl.length > 0;
 
   if (hasText && hasPdf) {
     return { ok: false, error: "Provide either text or a PDF, not both." };
@@ -40,23 +60,10 @@ export function parseAnalyzeRequest(body: unknown): ParseResult {
     return { ok: true, input: { kind: "text", text: trimmed } };
   }
 
-  const b64 = pdfBase64 as string;
-  if (!BASE64_RE.test(b64)) {
-    return { ok: false, error: "PDF data is not valid base64." };
+  const url = blobUrl as string;
+  if (!isOurBlobUrl(url)) {
+    return { ok: false, error: BAD_BLOB_URL };
   }
 
-  const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
-  const decodedBytes = Math.floor((b64.length * 3) / 4) - padding;
-  if (decodedBytes > MAX_PDF_BYTES) {
-    return { ok: false, error: `PDF is too large (max ${MAX_PDF_LABEL}).` };
-  }
-
-  const headerPrefix = Buffer.from(b64.slice(0, 8), "base64").toString(
-    "latin1"
-  );
-  if (!headerPrefix.startsWith("%PDF")) {
-    return { ok: false, error: "File does not look like a PDF." };
-  }
-
-  return { ok: true, input: { kind: "pdf", pdfBase64: b64 } };
+  return { ok: true, input: { kind: "pdf", blobUrl: url } };
 }
